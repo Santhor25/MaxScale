@@ -1,0 +1,66 @@
+
+==================================================================
+== 20 lecturas 'SELECT @@hostname' (conexiones nuevas a MaxScale)
+==================================================================
+     20 mariadb-slave1
+
+==================================================================
+== Lecturas dentro de UNA misma sesion (10 SELECT seguidos)
+==================================================================
+      5 mariadb-slave1
+      5 mariadb-slave2
+
+==================================================================
+== 10 escrituras INSERT ... VALUES (@@hostname) via MaxScale
+==================================================================
+ejecutado_en	inserts
+rws:mariadb-master	10
+
+==================================================================
+== Mix en una sesion: SELECT, INSERT, SELECT y SELECT dentro de transaccion
+==================================================================
+consulta	servidor
+select (autocommit)	mariadb-slave1
+consulta	servidor
+select tras insert	mariadb-slave2
+consulta	servidor
+select en transaccion	mariadb-master
+
+==================================================================
+== Estadisticas del router (consultas enrutadas por servidor)
+==================================================================
+{
+  "queries": 80,
+  "route_master": 14,
+  "route_slave": 33,
+  "route_all": 33,
+  "server_query_statistics": [
+    {
+      "avg_selects_per_session": 0,
+      "avg_sess_active_pct": 5.988215104749856,
+      "avg_sess_duration": "7.87181ms",
+      "id": "server2",
+      "read": 60,
+      "total": 60,
+      "write": 0
+    },
+    {
+      "avg_selects_per_session": 0,
+      "avg_sess_active_pct": 0,
+      "avg_sess_duration": "7.87181ms",
+      "id": "server1",
+      "read": 33,
+      "total": 47,
+      "write": 14
+    },
+    {
+      "avg_selects_per_session": 0,
+      "avg_sess_active_pct": 0.27134292472246874,
+      "avg_sess_duration": "7.87181ms",
+      "id": "server3",
+      "read": 39,
+      "total": 39,
+      "write": 0
+    }
+  ]
+}

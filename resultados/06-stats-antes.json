@@ -1,0 +1,29 @@
+[
+  {
+    "avg_selects_per_session": 0,
+    "avg_sess_active_pct": 0.5436710905231141,
+    "avg_sess_duration": "28.3392ms",
+    "id": "server2",
+    "read": 262,
+    "total": 397,
+    "write": 135
+  },
+  {
+    "avg_selects_per_session": 0,
+    "avg_sess_active_pct": 0,
+    "avg_sess_duration": "28.3392ms",
+    "id": "server1",
+    "read": 66,
+    "total": 114,
+    "write": 48
+  },
+  {
+    "avg_selects_per_session": 0,
+    "avg_sess_active_pct": 1.5347672996828499,
+    "avg_sess_duration": "28.3392ms",
+    "id": "server3",
+    "read": 344,
+    "total": 344,
+    "write": 0
+  }
+]

@@ -1,0 +1,53 @@
+
+==================================================================
+== Maestro: estado del binlog y replicacion semisincrona
+==================================================================
+nodo	server_id	gtid	read_only
+mariadb-master	1	0-1-23	0
+Variable_name	Value
+rpl_semi_sync_master_enabled	ON
+Variable_name	Value
+Rpl_semi_sync_master_status	ON
+Variable_name	Value
+Rpl_semi_sync_master_clients	2
+Server_id	Host	Port	Master_id
+3	mariadb-slave2	3306	1
+2	mariadb-slave1	3306	1
+
+==================================================================
+== mariadb-slave1: SHOW SLAVE STATUS
+==================================================================
+                   Master_Host: mariadb-master
+              Slave_IO_Running: Yes
+             Slave_SQL_Running: Yes
+         Seconds_Behind_Master: 0
+                 Last_IO_Error: 
+                Last_SQL_Error: 
+                    Using_Gtid: Slave_Pos
+                   Gtid_IO_Pos: 0-1-23
+Variable_name	Value
+Rpl_semi_sync_slave_status	ON
+read_only
+1
+
+==================================================================
+== mariadb-slave2: SHOW SLAVE STATUS
+==================================================================
+                   Master_Host: mariadb-master
+              Slave_IO_Running: Yes
+             Slave_SQL_Running: Yes
+         Seconds_Behind_Master: 0
+                 Last_IO_Error: 
+                Last_SQL_Error: 
+                    Using_Gtid: Slave_Pos
+                   Gtid_IO_Pos: 0-1-23
+Variable_name	Value
+Rpl_semi_sync_slave_status	ON
+read_only
+1
+
+==================================================================
+== Propagacion: INSERT en el maestro y lectura en los esclavos
+==================================================================
+mariadb-slave1 -> filas con la marca 'prueba-replicacion-1793688949': 1  OK
+mariadb-slave2 -> filas con la marca 'prueba-replicacion-1793688949': 1  OK

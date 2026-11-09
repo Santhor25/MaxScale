@@ -1,0 +1,26 @@
+
+==================================================================
+== Preparando datos sbtest (4 tablas x 20000 filas) en mariadb-master
+==================================================================
+Creating a secondary index on 'sbtest4'...
+Creating a secondary index on 'sbtest1'...
+>> rw-maxscale (16 hilos, 120 s)...
+>> rw-directo (16 hilos, 120 s)...
+>> ro-maxscale (16 hilos, 120 s)...
+>> ro-directo (16 hilos, 120 s)...
+
+==================================================================
+== Resumen comparativo
+==================================================================
+PRUEBA                  TPS          QPS  LAT_PROM_ms   LAT_P95_ms  ERRORES
+rw-maxscale           80.68      1613.59       198.20       308.84        0
+rw-directo           105.81      2116.18       151.12       235.74        0
+ro-maxscale          211.45      2960.23        75.64       132.49        0
+ro-directo           434.22      6079.02        36.83        70.55        0
+
+==================================================================
+== Consultas enrutadas por MaxScale a cada servidor (acumulado)
+==================================================================
+server2: total=176271 lecturas=176136 escrituras=135
+server1: total=193986 lecturas=98 escrituras=193888
+server3: total=180064 lecturas=180064 escrituras=0

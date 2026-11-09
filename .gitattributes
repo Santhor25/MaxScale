@@ -1,0 +1,2 @@
+# Forzar finales de linea LF: los scripts y configs se ejecutan dentro de Linux/contenedores
+* text=auto eol=lf

@@ -1,0 +1,134 @@
+# Proyecto 6 - MariaDB 10.11 (1 maestro + 2 esclavos, replicacion semisincrona)
+#              + MariaDB MaxScale 23.08 (MariaDB Monitor + ReadWriteSplit) + Sysbench
+
+x-mariadb-base: &mariadb-base
+  image: mariadb:10.11
+  restart: unless-stopped
+  env_file: [lab.env]          # MARIADB_ROOT_PASSWORD y demas credenciales del laboratorio
+  healthcheck:
+    test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+    interval: 5s
+    timeout: 5s
+    retries: 30
+    start_period: 30s
+  networks: [dbnet]
+
+services:
+  mariadb-master:
+    <<: *mariadb-base
+    container_name: mariadb-master
+    hostname: mariadb-master
+    command:
+      - --server-id=1
+      - --report-host=mariadb-master
+      - --log-bin=mariadb-bin
+      - --log-slave-updates=ON
+      - --binlog-format=ROW
+      - --skip-name-resolve
+      # Replicacion semisincrona (activa en todos los nodos para que cualquier
+      # esclavo pueda ser promovido a maestro por MaxScale)
+      - --rpl-semi-sync-master-enabled=ON
+      - --rpl-semi-sync-slave-enabled=ON
+      - --rpl-semi-sync-master-timeout=10000
+      - --rpl-semi-sync-master-wait-point=AFTER_SYNC
+      - --rpl-semi-sync-master-wait-no-slave=OFF
+    ports: ["3307:3306"]
+    volumes:
+      - master-data:/var/lib/mysql
+      - ./mariadb/init/master:/docker-entrypoint-initdb.d:ro
+
+  mariadb-slave1:
+    <<: *mariadb-base
+    container_name: mariadb-slave1
+    hostname: mariadb-slave1
+    command:
+      - --server-id=2
+      - --report-host=mariadb-slave1
+      - --log-bin=mariadb-bin
+      - --log-slave-updates=ON
+      - --binlog-format=ROW
+      - --skip-name-resolve
+      # Replicacion semisincrona (activa en todos los nodos para que cualquier
+      # esclavo pueda ser promovido a maestro por MaxScale)
+      - --rpl-semi-sync-master-enabled=ON
+      - --rpl-semi-sync-slave-enabled=ON
+      - --rpl-semi-sync-master-timeout=10000
+      - --rpl-semi-sync-master-wait-point=AFTER_SYNC
+      - --rpl-semi-sync-master-wait-no-slave=OFF
+    ports: ["3308:3306"]
+    volumes:
+      - slave1-data:/var/lib/mysql
+      - ./mariadb/init/slave:/docker-entrypoint-initdb.d:ro
+    depends_on:
+      mariadb-master:
+        condition: service_healthy
+
+  mariadb-slave2:
+    <<: *mariadb-base
+    container_name: mariadb-slave2
+    hostname: mariadb-slave2
+    command:
+      - --server-id=3
+      - --report-host=mariadb-slave2
+      - --log-bin=mariadb-bin
+      - --log-slave-updates=ON
+      - --binlog-format=ROW
+      - --skip-name-resolve
+      # Replicacion semisincrona (activa en todos los nodos para que cualquier
+      # esclavo pueda ser promovido a maestro por MaxScale)
+      - --rpl-semi-sync-master-enabled=ON
+      - --rpl-semi-sync-slave-enabled=ON
+      - --rpl-semi-sync-master-timeout=10000
+      - --rpl-semi-sync-master-wait-point=AFTER_SYNC
+      - --rpl-semi-sync-master-wait-no-slave=OFF
+    ports: ["3309:3306"]
+    volumes:
+      - slave2-data:/var/lib/mysql
+      - ./mariadb/init/slave:/docker-entrypoint-initdb.d:ro
+    depends_on:
+      mariadb-master:
+        condition: service_healthy
+
+  maxscale:
+    image: mariadb/maxscale:23.08
+    container_name: maxscale
+    # OJO: el hostname NO puede ser "maxscale": la imagen usa monit y choca con su
+    # servicio interno "maxscale" (el contenedor quedaria reiniciandose en bucle).
+    # Los demas contenedores lo siguen encontrando por el nombre de servicio "maxscale".
+    hostname: maxscale-proxy
+    restart: unless-stopped
+    ports:
+      - "4006:4006"   # listener ReadWriteSplit
+      - "8989:8989"   # API REST + GUI
+    volumes:
+      - ./maxscale/maxscale.cnf:/etc/maxscale.cnf:ro
+      - maxscale-data:/var/lib/maxscale
+    depends_on:
+      mariadb-master:
+        condition: service_healthy
+      mariadb-slave1:
+        condition: service_healthy
+      mariadb-slave2:
+        condition: service_healthy
+    networks: [dbnet]
+
+  sysbench:
+    build: ./sysbench
+    image: p6-sysbench:latest
+    container_name: sysbench
+    hostname: sysbench
+    restart: unless-stopped
+    depends_on:
+      maxscale:
+        condition: service_started
+    networks: [dbnet]
+
+volumes:
+  master-data:
+  slave1-data:
+  slave2-data:
+  maxscale-data:
+
+networks:
+  dbnet:
+    driver: bridge

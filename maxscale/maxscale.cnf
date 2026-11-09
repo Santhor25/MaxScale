@@ -1,0 +1,77 @@
+# =====================================================================
+# MariaDB MaxScale 23.08 - Proyecto 6
+#   Monitor : mariadbmon (auto-deteccion de topologia + auto_failover)
+#   Router  : readwritesplit (escrituras -> maestro, lecturas -> esclavos)
+#   Listener: puerto 4006
+#   API REST: puerto 8989 (usuario por defecto admin / mariadb)
+# =====================================================================
+
+[maxscale]
+threads=auto
+admin_host=0.0.0.0
+admin_port=8989
+admin_secure_gui=false
+log_info=false
+
+# ---------------------------------------------------------------------
+# Servidores backend (no se indica quien es maestro: el monitor lo detecta)
+# ---------------------------------------------------------------------
+[server1]
+type=server
+address=mariadb-master
+port=3306
+
+[server2]
+type=server
+address=mariadb-slave1
+port=3306
+
+[server3]
+type=server
+address=mariadb-slave2
+port=3306
+
+# ---------------------------------------------------------------------
+# Monitor: detecta la topologia y promueve un esclavo si cae el maestro
+# ---------------------------------------------------------------------
+[MariaDB-Monitor]
+type=monitor
+module=mariadbmon
+servers=server1,server2,server3
+user=maxscale_monitor
+password=monitor_pass
+monitor_interval=1000ms
+backend_connect_timeout=2s
+# Failover automatico: tras 'failcount' chequeos fallidos promueve un esclavo
+auto_failover=true
+failcount=3
+failover_timeout=60s
+switchover_timeout=60s
+# Reintegra automaticamente el maestro antiguo como esclavo cuando vuelve
+auto_rejoin=true
+# Pone read_only=ON en los esclavos para evitar escrituras directas
+enforce_read_only_slaves=true
+# Credenciales que usara MaxScale al ejecutar CHANGE MASTER en failover/rejoin
+replication_user=repl
+replication_password=repl_pass
+
+# ---------------------------------------------------------------------
+# Servicio ReadWriteSplit
+# ---------------------------------------------------------------------
+[RW-Split-Router]
+type=service
+router=readwritesplit
+servers=server1,server2,server3
+user=maxscale
+password=maxscale_pass
+# Reconexion transparente al nuevo maestro tras un failover
+master_reconnection=true
+master_failure_mode=fail_on_write
+transaction_replay=true
+# Balanceo de lecturas entre esclavos (por defecto usa todos los esclavos disponibles)
+slave_selection_criteria=LEAST_CURRENT_OPERATIONS
+
+[RW-Split-Listener]
+type=listener
+service=RW-Split-Router
+port=4006

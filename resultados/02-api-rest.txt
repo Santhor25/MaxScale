@@ -1,0 +1,51 @@
+
+==================================================================
+== GET /v1/servers  (topologia detectada por MariaDB Monitor)
+==================================================================
+SERVIDOR  DIRECCION       ESTADO           GTID
+server1   mariadb-master  Master, Running  0-1-24
+server2   mariadb-slave1  Slave, Running   0-1-24
+server3   mariadb-slave2  Slave, Running   0-1-24
+
+==================================================================
+== GET /v1/monitors/MariaDB-Monitor  (parametros clave)
+==================================================================
+{
+  "state": "Running",
+  "modulo": "mariadbmon",
+  "parameters": {
+    "auto_failover": true,
+    "auto_rejoin": true,
+    "failcount": 3,
+    "enforce_read_only_slaves": true,
+    "monitor_interval": "1000ms"
+  }
+}
+
+==================================================================
+== GET /v1/services/RW-Split-Router  (router y conexiones)
+==================================================================
+{
+  "router": "readwritesplit",
+  "state": "Started",
+  "connections": 0,
+  "total_connections": 0
+}
+
+==================================================================
+== GET /v1/listeners
+==================================================================
+RW-Split-Listener  puerto=4006  estado=Running
+
+==================================================================
+== maxctrl list servers (CLI equivalente)
+==================================================================
+┌─────────┬────────────────┬──────┬─────────────┬─────────────────┬────────┬─────────────────┐
+│ Server  │ Address        │ Port │ Connections │ State           │ GTID   │ Monitor         │
+├─────────┼────────────────┼──────┼─────────────┼─────────────────┼────────┼─────────────────┤
+│ server1 │ mariadb-master │ 3306 │ 0           │ Master, Running │ 0-1-24 │ MariaDB-Monitor │
+├─────────┼────────────────┼──────┼─────────────┼─────────────────┼────────┼─────────────────┤
+│ server2 │ mariadb-slave1 │ 3306 │ 0           │ Slave, Running  │ 0-1-24 │ MariaDB-Monitor │
+├─────────┼────────────────┼──────┼─────────────┼─────────────────┼────────┼─────────────────┤
+│ server3 │ mariadb-slave2 │ 3306 │ 0           │ Slave, Running  │ 0-1-24 │ MariaDB-Monitor │
+└─────────┴────────────────┴──────┴─────────────┴─────────────────┴────────┴─────────────────┘

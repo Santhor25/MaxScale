@@ -1,0 +1,4 @@
+.vagrant/
+*.log
+resultados/.maestro_caido
+resultados/diagnostico.txt

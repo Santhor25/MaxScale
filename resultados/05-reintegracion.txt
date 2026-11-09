@@ -1,0 +1,37 @@
+
+==================================================================
+== Arrancando de nuevo mariadb-master (server1)
+==================================================================
+Contenedor healthy en 6.1 s
+>> server1 reintegrado con estado 'Slave, Running' en 6.2 s
+
+==================================================================
+== Topologia tras la reintegracion
+==================================================================
+SERVIDOR  DIRECCION       ESTADO           GTID
+server1   mariadb-master  Slave, Running   0-2-203
+server2   mariadb-slave1  Master, Running  0-2-203
+server3   mariadb-slave2  Slave, Running   0-2-203
+
+==================================================================
+== mariadb-master: SHOW SLAVE STATUS (ahora replica del nuevo maestro)
+==================================================================
+                   Master_Host: mariadb-slave1
+              Slave_IO_Running: Yes
+             Slave_SQL_Running: Yes
+         Seconds_Behind_Master: 0
+                 Last_IO_Error: 
+                    Using_Gtid: Current_Pos
+filas_failover_recibidas
+168
+read_only
+1
+
+==================================================================
+== Switchover controlado: devolver el rol de maestro a server1
+==================================================================
+OK
+SERVIDOR  DIRECCION       ESTADO           GTID
+server1   mariadb-master  Master, Running  0-2-203
+server2   mariadb-slave1  Slave, Running   0-2-203
+server3   mariadb-slave2  Slave, Running   0-2-203

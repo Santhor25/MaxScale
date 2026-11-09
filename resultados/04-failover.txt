@@ -1,0 +1,38 @@
+
+==================================================================
+== Topologia ANTES del failover
+==================================================================
+SERVIDOR  DIRECCION       ESTADO           GTID
+server1   mariadb-master  Master, Running  0-1-35
+server2   mariadb-slave1  Slave, Running   0-1-35
+server3   mariadb-slave2  Slave, Running   0-1-35
+Maestro actual: server1 (mariadb-master)
+
+==================================================================
+== Iniciando cliente escritor (45 s, 1 INSERT cada ~200 ms)
+==================================================================
+
+==================================================================
+== Deteniendo el maestro: docker stop mariadb-master
+==================================================================
+Contenedor detenido en .752060349 s
+Nuevo maestro promovido por MaxScale: server2 (mariadb-slave1)
+>> TIEMPO DE FAILOVER (docker stop -> nuevo Master en API REST): 3.77 s
+
+==================================================================
+== Impacto visto por el cliente escritor
+==================================================================
+Intentos: 169   OK: 168   FALLIDOS: 1
+Primer error: 1793688990.411909866 FAIL --------------
+>> VENTANA SIN ESCRITURAS: 0.52 s (desde el ultimo OK antes de la caida hasta el primer OK despues)
+
+==================================================================
+== Topologia DESPUES del failover
+==================================================================
+SERVIDOR  DIRECCION       ESTADO           GTID
+server1   mariadb-master  Down             0-1-66
+server2   mariadb-slave1  Master, Running  0-2-202
+server3   mariadb-slave2  Slave, Running   0-2-202
+escrito_en	inserts
+failover:mariadb-master	33
+failover:mariadb-slave1	135
