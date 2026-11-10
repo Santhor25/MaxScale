@@ -74,7 +74,7 @@ como esclavo en 6,2 s, y el benchmark Sysbench (16 hilos × 120 s) corre con 0 e
 Para los scripts de prueba: `bash`, `curl`, `jq` y `bc` (en Windows, usar WSL).
 
 ```bash
-git clone <URL-del-repositorio>
+git clone https://github.com/Santhor25/MaxScale.git
 cd <carpeta-del-repositorio>
 docker compose up -d --wait
 docker compose ps
@@ -90,7 +90,7 @@ La primera vez descarga las imágenes y construye la de Sysbench (unos minutos).
 corriendo en contenedores.
 
 ```powershell
-git clone <URL-del-repositorio>
+git clone https://github.com/Santhor25/MaxScale.git
 cd <carpeta-del-repositorio>
 vagrant up
 ```
