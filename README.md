@@ -84,11 +84,7 @@ con el plugin Compose en Linux. Docker Desktop debe estar **abierto** antes de e
 
 ```bash
 git clone https://github.com/Santhor25/MaxScale.git
-<<<<<<< HEAD
 cd MaxScale
-=======
-cd <carpeta-del-repositorio>
->>>>>>> edb83d48754c6320dfbc14f3e4d4edd45f0efc33
 docker compose up -d --wait
 ```
 
@@ -122,11 +118,7 @@ el proyecto sigue corriendo en contenedores.
 
 ```powershell
 git clone https://github.com/Santhor25/MaxScale.git
-<<<<<<< HEAD
 cd MaxScale
-=======
-cd <carpeta-del-repositorio>
->>>>>>> edb83d48754c6320dfbc14f3e4d4edd45f0efc33
 vagrant up
 ```
 
