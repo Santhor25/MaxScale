@@ -2,6 +2,9 @@
 
 Servicios Telemáticos · UAO · 2026-2
 
+> **¿Solo quieres ponerlo a correr?** Ve directo a [Cómo iniciarlo](#cómo-iniciarlo): son tres
+> comandos para copiar y pegar.
+
 ## ¿Qué hace este proyecto?
 
 Una aplicación con una sola base de datos tiene dos problemas: si ese servidor se cae, se cae todo,
@@ -68,43 +71,80 @@ como esclavo en 6,2 s, y el benchmark Sysbench (16 hilos × 120 s) corre con 0 e
 
 ## Cómo iniciarlo
 
+Elige **una** de las dos opciones según lo que tengas instalado. Cada bloque se copia y se pega
+completo en la terminal.
+
 ### Opción A — Con Docker (recomendada)
 
-**Requisitos:** Docker Engine con el plugin Compose (Linux) o Docker Desktop (Windows / Mac).
-Para los scripts de prueba: `bash`, `curl`, `jq` y `bc` (en Windows, usar WSL).
+**Requisitos:** [Git](https://git-scm.com/downloads) y Docker con Compose:
+[Docker Desktop](https://www.docker.com/products/docker-desktop/) en Windows o Mac, o Docker Engine
+con el plugin Compose en Linux. Docker Desktop debe estar **abierto** antes de empezar.
+
+**Paso 1 — Clonar y levantar todo** (PowerShell, terminal de Mac o de Linux):
 
 ```bash
-git clone <URL-del-repositorio>
-cd <carpeta-del-repositorio>
+git clone https://github.com/Santhor25/MaxScale.git
+cd MaxScale
 docker compose up -d --wait
-docker compose ps
 ```
 
-La primera vez descarga las imágenes y construye la de Sysbench (unos minutos). Estará listo cuando
-`docker compose ps` muestre los 5 contenedores `Up` y los tres MariaDB como `(healthy)`. Espera unos
-10 segundos más para que MaxScale termine de detectar la topología.
+La primera vez descarga las imágenes y construye la de Sysbench (5–10 minutos según la conexión).
+El comando termina solo cuando todo está arriba.
 
-### Opción B — Con Vagrant (si el equipo no tiene Docker)
+**Paso 2 — Verificar:**
 
-**Requisitos:** VirtualBox y Vagrant. La VM (Ubuntu 22.04) solo instala Docker; el proyecto sigue
-corriendo en contenedores.
+```bash
+docker compose ps
+docker exec maxscale maxctrl list servers
+```
+
+Deben aparecer los 5 contenedores `Up` (los tres MariaDB `healthy`) y MaxScale debe mostrar
+`server1` como `Master, Running` y `server2` y `server3` como `Slave, Running`. Si los servidores
+aún no muestran rol, espera 10 segundos y repite el segundo comando.
+
+**Paso 3 — Abrir la GUI de MaxScale:** <http://localhost:8989> (usuario `admin`, clave `mariadb`).
+
+Los scripts de prueba (`scripts/pruebas/`) necesitan `bash`, `curl`, `jq` y `bc`. En Linux y Mac se
+corren directamente desde la carpeta `MaxScale`; en Windows, desde WSL.
+
+### Opción B — Con Vagrant (equipos sin Docker)
+
+**Requisitos:** [Git](https://git-scm.com/downloads),
+[VirtualBox](https://www.virtualbox.org/wiki/Downloads) y
+[Vagrant](https://developer.hashicorp.com/vagrant/install). La VM (Ubuntu 22.04) solo instala Docker;
+el proyecto sigue corriendo en contenedores.
+
+**Paso 1 — Clonar y crear la VM** (PowerShell):
 
 ```powershell
-git clone <URL-del-repositorio>
-cd <carpeta-del-repositorio>
+git clone https://github.com/Santhor25/MaxScale.git
+cd MaxScale
 vagrant up
 ```
 
-`vagrant up` crea la VM, instala Docker, levanta los contenedores y corre las pruebas 01–03. Para
-trabajar dentro de la VM:
+`vagrant up` crea la VM, instala Docker, levanta los contenedores y corre las pruebas 01–03 (10–20
+minutos la primera vez). Al final debe decir `Stack listo`.
+
+**Paso 2 — Entrar a la VM** (todos los comandos de las secciones siguientes se ejecutan ahí):
 
 ```powershell
 vagrant ssh
-cd /vagrant
 ```
 
-Con Hyper-V activo en Windows, VirtualBox arranca lento; por eso la VM usa 1 CPU y `boot_timeout` de
-900 s. Los puertos 4006 y 8989 quedan redirigidos a `localhost` de Windows.
+```bash
+cd /vagrant
+docker exec maxscale maxctrl list servers
+```
+
+**Paso 3 — Abrir la GUI de MaxScale** en el navegador de Windows: <http://localhost:8989>
+(usuario `admin`, clave `mariadb`). Los puertos 4006 y 8989 de la VM quedan redirigidos a
+`localhost`.
+
+Si `vagrant up` termina en *timeout*, es porque Hyper-V está activo y VirtualBox arranca lento:
+ejecuta `vagrant up --provision` para continuar (ver *Solución de problemas*).
+
+**Para apagar y volver otro día:** `exit` y luego `vagrant halt`. Al volver, `vagrant up` y
+`vagrant ssh` (ya no reinstala nada; los contenedores arrancan solos).
 
 ### Comprobar que funciona
 
@@ -135,6 +175,8 @@ bash scripts/pruebas/03-readwritesplit.sh
 bash scripts/pruebas/04-failover.sh
 bash scripts/pruebas/05-reintegrar-maestro.sh --switchover
 bash scripts/pruebas/06-benchmark.sh               # ~10 min
+bash scripts/pruebas/07-balanceo.sh                # reparto de lecturas entre esclavos (~1 min)
+bash scripts/pruebas/08-ponerse-al-dia.sh          # un esclavo apagado se pone al dia (~1 min)
 ```
 
 Con Vagrant también se pueden correr todas juntas desde Windows:
@@ -148,6 +190,8 @@ Con Vagrant también se pueden correr todas juntas desde Windows:
 | 04 | `04-failover.sh` | `docker stop` del maestro, tiempo hasta la promoción y ventana sin escrituras |
 | 05 | `05-reintegrar-maestro.sh` | el maestro original vuelve como esclavo (`auto_rejoin`); `--switchover` le devuelve el rol |
 | 06 | `06-benchmark.sh` | Sysbench OLTP 16 hilos × 120 s vía MaxScale vs. directo al maestro |
+| 07 | `07-balanceo.sh` | SELECT ejecutados por cada nodo bajo carga: los esclavos se reparten la lectura |
+| 08 | `08-ponerse-al-dia.sh` | apaga un esclavo, escribe 500.000 filas y mide cómo se pone al día al volver |
 
 Cada script guarda su salida en `resultados/`. Antes de repetir el 04, correr el 05 con
 `--switchover` para que `mariadb-master` vuelva a ser el maestro.
