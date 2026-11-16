@@ -177,6 +177,7 @@ bash scripts/pruebas/05-reintegrar-maestro.sh --switchover
 bash scripts/pruebas/06-benchmark.sh               # ~10 min
 bash scripts/pruebas/07-balanceo.sh                # reparto de lecturas entre esclavos (~1 min)
 bash scripts/pruebas/08-ponerse-al-dia.sh          # un esclavo apagado se pone al dia (~1 min)
+bash scripts/pruebas/09-escalado.sh                # agrega 2 esclavos mas (ver Planes de prueba)
 ```
 
 Con Vagrant también se pueden correr todas juntas desde Windows:
@@ -192,20 +193,162 @@ Con Vagrant también se pueden correr todas juntas desde Windows:
 | 06 | `06-benchmark.sh` | Sysbench OLTP 16 hilos × 120 s vía MaxScale vs. directo al maestro |
 | 07 | `07-balanceo.sh` | SELECT ejecutados por cada nodo bajo carga: los esclavos se reparten la lectura |
 | 08 | `08-ponerse-al-dia.sh` | apaga un esclavo, escribe 500.000 filas y mide cómo se pone al día al volver |
+| 09 | `09-escalado.sh` | Plan 1: agrega 2 esclavos en caliente y mide el reparto entre 4 réplicas |
 
 Cada script guarda su salida en `resultados/`. Antes de repetir el 04, correr el 05 con
 `--switchover` para que `mariadb-master` vuelva a ser el maestro.
+
+## Planes de prueba
+
+Cuatro planes para evaluar el sistema más allá de las pruebas mínimas. Cada uno tiene objetivo,
+preparación, pasos, qué medir y criterio de éxito. Se ejecutan desde la raíz del repositorio (con
+Vagrant: dentro de `vagrant ssh` y `cd /vagrant`). Antes de cada plan, `server1` debe ser el maestro:
+
+```bash
+docker exec maxscale maxctrl call command mariadbmon switchover MariaDB-Monitor server1
+docker exec maxscale maxctrl list servers
+```
+
+### Plan 1 — Escalado horizontal: más esclavos
+
+**Objetivo:** comprobar que se pueden agregar réplicas sin detener el servicio, que MaxScale las
+incorpora en caliente y que las lecturas se reparten entre todos los esclavos.
+
+**Preparación:** el archivo `docker-compose.escalado.yml` define `mariadb-slave3` (puerto 3310) y
+`mariadb-slave4` (puerto 3311). Con Vagrant, darle a la VM al menos 4 GB de RAM (`vb.memory`).
+
+**Pasos (automatizado):**
+
+```bash
+bash scripts/pruebas/09-escalado.sh
+```
+
+El script:
+1. Levanta los dos esclavos nuevos con
+   `docker compose -f docker-compose.yml -f docker-compose.escalado.yml up -d --wait`.
+2. Los registra en MaxScale **sin reiniciarlo ni editar `maxscale.cnf`**:
+   `maxctrl create server server4 mariadb-slave3 3306 --services RW-Split-Router --monitors MariaDB-Monitor`.
+3. Espera a que copien todo el historial del maestro por GTID y mide cuánto tardan.
+4. Ejecuta `07-balanceo.sh` para medir el reparto de lecturas entre los 4 esclavos.
+
+**Qué medir:**
+
+| Métrica | Dónde se ve |
+|---|---|
+| Tiempo hasta que los nuevos esclavos alcanzan el GTID del maestro | línea `>> Esclavos nuevos sincronizados en …` |
+| Rol detectado por MaxScale | `server4` y `server5` como `Slave, Running` |
+| Clientes semisíncronos en el maestro | `Rpl_semi_sync_master_clients` = 4 |
+| Porcentaje de SELECT por nodo | tabla final de `07-balanceo.sh` |
+| TPS de solo lectura con 2 vs. 4 esclavos | `transactions:` en la salida de Sysbench |
+
+**Criterio de éxito:** los 4 esclavos con el mismo GTID que el maestro, ninguna petición de cliente
+fallida durante la incorporación, y cada esclavo con alrededor del 25 % de los SELECT (±10 puntos).
+En una VM de 1 CPU el TPS no subirá: el plan valida el **reparto**; para validar la **ganancia** de
+rendimiento hay que repetirlo con más CPU.
+
+**Variante — failover con 4 esclavos:** con los 5 nodos arriba, ejecutar `04-failover.sh`. MaxScale
+debe promover al esclavo más actualizado y reapuntar a los **otros 3**. Comparar el tiempo de failover
+con el obtenido con 2 esclavos.
+
+**Limpieza:** `bash scripts/pruebas/09-escalado.sh --quitar` los saca de MaxScale y borra sus
+contenedores y volúmenes.
+
+### Plan 2 — Caída de un esclavo bajo carga de lectura
+
+**Objetivo:** demostrar que si cae una réplica, MaxScale la saca del reparto y las lecturas siguen
+funcionando en las demás sin errores para el cliente.
+
+**Pasos:**
+
+1. Terminal 1, carga de lectura continua durante 90 s, con reporte cada segundo:
+   ```bash
+   docker exec sysbench sysbench oltp_read_only --db-driver=mysql --mysql-host=maxscale --mysql-port=4006 \
+     --mysql-user=app --mysql-password=app_pass --mysql-db=sbtest --tables=4 --table-size=20000 \
+     --threads=16 --time=90 --skip_trx=on --db-ps-mode=disable --report-interval=1 run
+   ```
+   (Si no existen las tablas `sbtest`, crearlas antes ejecutando `07-balanceo.sh` una vez.)
+2. Terminal 2, a los 30 s: `docker stop mariadb-slave2`
+3. Terminal 2, a los 60 s: `docker start mariadb-slave2`
+4. Al terminar: `docker exec maxscale maxctrl list servers`
+
+**Qué medir:** TPS por segundo antes, durante y después de la caída (salida de la terminal 1);
+número de errores (`ignored errors` y `reconnects` en el resumen de Sysbench); segundos hasta que
+`server3` vuelve a aparecer como `Slave`.
+
+**Criterio de éxito:** 0 errores fatales en Sysbench; durante la caída todas las lecturas van al
+esclavo restante; al volver, `server3` se reincorpora al reparto sin intervención manual.
+
+### Plan 3 — Failover del maestro bajo carga de escritura
+
+**Objetivo:** medir el impacto real de un failover sobre una aplicación que escribe sin parar: cuántos
+segundos baja el rendimiento y cuántas transacciones se pierden.
+
+**Pasos:**
+
+1. Terminal 1, carga de lectura/escritura durante 120 s, reporte cada segundo:
+   ```bash
+   docker exec sysbench sysbench oltp_read_write --db-driver=mysql --mysql-host=maxscale --mysql-port=4006 \
+     --mysql-user=app --mysql-password=app_pass --mysql-db=sbtest --tables=4 --table-size=20000 \
+     --threads=16 --time=120 --db-ps-mode=disable --report-interval=1 \
+     --mysql-ignore-errors=all run | tee resultados/plan3-failover-bajo-carga.txt
+   ```
+2. Terminal 2, a los 40 s: `docker stop mariadb-master`
+3. Terminal 2, a los 80 s: `docker start mariadb-master`
+
+**Qué medir:** el intervalo en segundos en que el TPS cae a 0 o casi 0 (líneas `[ Ns ]` del
+reporte); el tiempo hasta que MaxScale muestra un nuevo `Master`; `ignored errors` al final; y el TPS
+promedio antes y después del failover.
+
+**Criterio de éxito:** el TPS se recupera en menos de 10 s tras la caída, el nuevo maestro aparece en
+la API antes de 5 s, y el maestro original vuelve como `Slave` con el mismo GTID que el resto.
+Graficar el TPS por segundo de este archivo es una buena figura para el informe.
+
+### Plan 4 — Persistencia y reinicio completo del clúster
+
+**Objetivo:** comprobar que los datos sobreviven a un apagado total gracias a los volúmenes Docker,
+y que al encender todo el clúster recupera la misma topología sin reconfigurar nada.
+
+**Pasos:**
+
+```bash
+# 1. Anotar el estado antes
+docker exec sysbench mariadb -h maxscale -P 4006 -uapp -papp_pass -N -e "SELECT COUNT(*), MAX(id) FROM demo.registros"
+docker exec maxscale maxctrl list servers
+
+# 2. Apagar TODO (sin -v: los volúmenes se conservan)
+docker compose down
+
+# 3. Volver a encender
+docker compose up -d --wait
+sleep 15
+
+# 4. Comparar
+docker exec sysbench mariadb -h maxscale -P 4006 -uapp -papp_pass -N -e "SELECT COUNT(*), MAX(id) FROM demo.registros"
+docker exec maxscale maxctrl list servers
+bash scripts/pruebas/01-verificar-replicacion.sh
+```
+
+Con Vagrant, repetir además con la VM completa: `exit`, `vagrant halt`, `vagrant up`, `vagrant ssh`.
+
+**Qué medir:** filas y `MAX(id)` antes y después; GTID de los tres servidores; tiempo desde
+`docker compose up` hasta que los tres aparecen como `Running`; que los scripts de inicialización
+**no** se vuelvan a ejecutar (los usuarios no se recrean y no hay errores en `docker logs mariadb-master`).
+
+**Criterio de éxito:** mismo número de filas y mismo GTID antes y después; `server1` Master y los
+demás Slave sin intervención; replicación `Yes / Yes` en ambos esclavos. Como contraprueba,
+`docker compose down -v` sí borra todo y el clúster arranca vacío.
 
 ## Estructura del repositorio
 
 ```
 docker-compose.yml                    5 servicios, volúmenes persistentes y health checks
+docker-compose.escalado.yml           2 esclavos extra para el plan de escalado
 lab.env                               contraseñas del laboratorio (solo para pruebas)
 mariadb/init/master/01-usuarios.sql   usuarios repl, monitor, servicio MaxScale, app + BDs
 mariadb/init/slave/01-replica.sql     CHANGE MASTER ... MASTER_USE_GTID=slave_pos
 maxscale/maxscale.cnf                 monitor, router y listener (montado como volumen)
 sysbench/Dockerfile                   sysbench 1.0 + cliente mariadb
-scripts/pruebas/01..06                pruebas mínimas del enunciado
+scripts/pruebas/01..09                pruebas del enunciado y planes de prueba
 scripts/diagnostico.sh                guarda estado y logs de MaxScale si algo falla
 Vagrantfile, scripts/provision/       opción B: VM con Docker
 resultados/                           salidas de las pruebas

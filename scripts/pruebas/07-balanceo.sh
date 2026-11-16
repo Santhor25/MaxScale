@@ -6,7 +6,8 @@
 #        DURACION=60 07-balanceo.sh
 source "$(dirname "$0")/comun.sh"
 DUR=${DURACION:-30}
-NODOS="mariadb-master mariadb-slave1 mariadb-slave2"
+# Todos los servidores que MaxScale conoce y estan corriendo (3, o 5 con el plan de escalado)
+NODOS=$(api servers | jq -r '.data[] | select(.attributes.state | test("Running")) | .attributes.parameters.address')
 MAESTRO=$(direccion_de "$(maestro_actual)")
 
 selects() { sql_nodo "$1" -N -e "SHOW GLOBAL STATUS LIKE 'Com_select'" | awk '{print $2}'; }
@@ -38,7 +39,7 @@ for n in $NODOS; do
   printf "%-16s %-8s %12d %7.1f%%\n" "$n" "$rol" "${DELTA[$n]}" "$(echo "scale=4; 100*${DELTA[$n]}/$TOTAL" | bc)"
 done
 echo
-echo "Si el balanceo funciona, los dos esclavos quedan con un porcentaje parecido y el maestro casi en 0."
+echo "Si el balanceo funciona, los esclavos quedan con porcentajes parecidos y el maestro casi en 0."
 
 titulo "Lo mismo visto por MaxScale (acumulado desde que arranco MaxScale)"
 api services/RW-Split-Router | jq -r '.data.attributes.router_diagnostics.server_query_statistics[] | "\(.id): lecturas=\(.read)  escrituras=\(.write)  total=\(.total)"'
