@@ -9,6 +9,10 @@ API_AUTH="${MAXSCALE_API_USER}:${MAXSCALE_API_PASSWORD}"
 RESULTADOS="$PROYECTO_DIR/resultados"
 mkdir -p "$RESULTADOS"
 
+# En Windows (Git Bash) jq es un binario nativo que termina las lineas en CRLF; el '\r'
+# sobrante rompe comparaciones y URLs (p. ej. "server1\r"). En Linux/Mac no cambia nada.
+jq() { command jq "$@" | tr -d '\r'; }
+
 titulo() { echo; echo "=================================================================="; echo "== $*"; echo "=================================================================="; }
 
 # SQL como root directamente sobre un contenedor MariaDB
